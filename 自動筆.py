@@ -1,4 +1,3 @@
-
 import trafilatura
 from openai import OpenAI
 import requests
@@ -7,6 +6,7 @@ import ast
 import json
 import time
 import random
+
 #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
 client = OpenAI(
   base_url = "https://integrate.api.nvidia.com/v1",
