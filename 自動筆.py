@@ -7,6 +7,8 @@ import json
 import time
 import random
 
+DEBUG = False
+
 #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
 client = OpenAI(
   base_url = "https://integrate.api.nvidia.com/v1",
@@ -67,7 +69,7 @@ def extract_json_content(input_string):
     else:
         return {}
 
-def titler(outline, query, max_retries=3, delay=2):
+def titler(outline, query, model, max_retries=3, delay=2):
     attempt = 0
     while attempt < max_retries:
         try:
@@ -86,7 +88,7 @@ def titler(outline, query, max_retries=3, delay=2):
             """
 
             completion = client.chat.completions.create(
-                model="meta/llama-3.1-405b-instruct",
+                model=model,
                 messages=[{"role": "user", "content": prompt.strip()}],
                 temperature=0.2,
                 top_p=0.7,
@@ -111,7 +113,7 @@ def titler(outline, query, max_retries=3, delay=2):
             else:
                 raise
 
-def structurer(result_list, query, max_retries=3, delay=2):
+def structurer(result_list, query, model, max_retries=3, delay=2):
     attempt = 0
     while attempt < max_retries:
         try:
@@ -128,7 +130,7 @@ def structurer(result_list, query, max_retries=3, delay=2):
             """
 
             completion = client.chat.completions.create(
-                model="meta/llama-3.1-405b-instruct",
+                model=model,
                 messages=[{"role": "user", "content": prompt.strip()}],
                 temperature=0.2,
                 top_p=0.7,
@@ -153,7 +155,7 @@ def structurer(result_list, query, max_retries=3, delay=2):
             else:
                 raise
 
-def topic_definer(website_text, query, max_retries=3, delay=2):
+def topic_definer(website_text, query, model, lang, max_retries=3, delay=2):
     attempt = 0
     while attempt < max_retries:
         try:
@@ -163,12 +165,13 @@ def topic_definer(website_text, query, max_retries=3, delay=2):
             {website_text}
 
             identify the topics that they wrote, and reform them into h2 headers.
+            output in {lang}
             return me a python list of h2 headers.
             NO premable and explanation. I only want the list without other words.
             """
 
             completion = client.chat.completions.create(
-                model="meta/llama-3.1-405b-instruct",
+                model=model,
                 messages=[{"role": "user", "content": prompt.strip()}],
                 temperature=0.2,
                 top_p=0.7,
@@ -193,7 +196,7 @@ def topic_definer(website_text, query, max_retries=3, delay=2):
             else:
                 raise
 
-def topic_refiner(topics, query, max_retries=3, delay=2):
+def topic_refiner(topics, query, model, lang, size, max_retries=3, delay=2):
     attempt = 0
     while attempt < max_retries:
         try:
@@ -208,12 +211,13 @@ def topic_refiner(topics, query, max_retries=3, delay=2):
             the h2 headers given should be distinct, non-repetitive, and focused. no generic or catch-all phrases. specific is MUST. no need elaboration in headers if not mentioned in original header. DO NOT form headers by clustering other's multiple headers. i need PICK and REWRITE.
             my inner content will be slightly different from reference article, so make sure headers are reformed.
             quality should be prioritized, less headers are better than vague and overly broad headers. no generic or catch-all phrases.
+            headers should be in {lang}
             return me a python list of headers only.
             NO premable and explanation needed.
             """
 
             completion = client.chat.completions.create(
-                model="meta/llama-3.1-405b-instruct",
+                model=model,
                 messages=[{"role": "user", "content": prompt.strip()}],
                 temperature=0.2,
                 top_p=0.7,
@@ -227,7 +231,7 @@ def topic_refiner(topics, query, max_retries=3, delay=2):
                     filtered_headers += chunk.choices[0].delta.content
             
             filtered_headers = extract_list_content(filtered_headers)
-            filtered_headers = topic_selector(filtered_headers, query)
+            filtered_headers = topic_selector(filtered_headers, query, model, lang, size)
             if filtered_headers:
                     return filtered_headers
 
@@ -239,7 +243,7 @@ def topic_refiner(topics, query, max_retries=3, delay=2):
             else:
                 raise
 
-def topic_selector(headers, query, max_retries=3, delay=2):
+def topic_selector(headers, query, model, lang, size, max_retries=3, delay=2):
     attempt = 0
     while attempt < max_retries:
         try:
@@ -251,12 +255,14 @@ def topic_selector(headers, query, max_retries=3, delay=2):
             there might be vague headers with different level of specificity as well.
             for example, '深圳必訪景點' and '深圳龍華區甜品店' is having significantly different level of specificity. in this case, remove the bigger coverage one, i.e. '深圳必訪景點'
             delete these vague or inappropriate headers ONLY. no need to modify acceptable headers.
+            expected header count: {size}, filter the best headers i needed only.
+            output in {lang}
             return me a python list of h2 headers.
             NO premable and explanation. I only want the list without other words.
             """
 
             completion = client.chat.completions.create(
-                model="meta/llama-3.1-405b-instruct",
+                model=model,
                 messages=[{"role": "user", "content": prompt.strip()}],
                 temperature=0.2,
                 top_p=0.7,
@@ -281,7 +287,7 @@ def topic_selector(headers, query, max_retries=3, delay=2):
             else:
                 raise
 
-def headerizer(result_list, query):
+def headerizer(result_list, query, model, lang, size):
     url_list = []
     for result in result_list:
         url_list.append(result["url"])
@@ -292,13 +298,13 @@ def headerizer(result_list, query):
         downloaded = trafilatura.fetch_url(url)
         website_text = trafilatura.extract(downloaded)
         if website_text:
-            topics = topic_definer(website_text, query)
+            topics = topic_definer(website_text, query, model, lang)
             all_topics.extend(topics)
 
-    all_topics = topic_refiner(all_topics, query)
+    all_topics = topic_refiner(all_topics, query, model, lang, size)
     return all_topics
 
-def querier(header, query, max_retries=3, delay=2):
+def querier(header, query, model, lang, max_retries=3, delay=2):
     attempt = 0
     while attempt < max_retries:
         try:
@@ -307,12 +313,13 @@ def querier(header, query, max_retries=3, delay=2):
             i need to do information research before writing
             for this specific header in the article {header}, i want you to craft me a web search query that can obtain most accurate information results to write the paragraphs under this header.
             You MUST ensure the search query is accurate information, to prevent search results points to other services or keywords.
+            craft the search query in {lang}
             return me a python list object with each list item a JSON object with a single key query without any premable and explanations. you can return more than one JSON object search query in the list.
             NO premable and explanation. Dont give me more than one list.
             """
 
             completion = client.chat.completions.create(
-                model="meta/llama-3.1-405b-instruct",
+                model=model,
                 messages=[{"role": "user", "content": prompt.strip()}],
                 temperature=0.2,
                 top_p=0.7,
@@ -337,7 +344,7 @@ def querier(header, query, max_retries=3, delay=2):
             else:
                 raise
 
-def pf_rewriter(article, header, title):
+def pf_rewriter(article, header, lang, title, model):
     full_article = ""
     prompt = f"""
     title of the crawled article:
@@ -351,11 +358,11 @@ def pf_rewriter(article, header, title):
     if the information i provided is referring to another service or information instead of the information looking for, return no results is better than wrong information.
     make sure you do not misidentify details. this is a MUST. make sure you did a summary check and ensure the bullet points are 100% correct without misidentifying events or information subject.
     you must label general information if the information is not directly addressing this specific header. (be careful of wrong country, district, human names, if they match the header)
-    return me in traditional chinese. no premable and explanation.
+    return me in {lang}. no premable and explanation.
     """
 
     completion = client.chat.completions.create(
-        model="meta/llama-3.1-405b-instruct",
+        model=model,
         messages=[{"role": "user", "content": prompt.strip()}],
         temperature=0.2,
         top_p=0.7,
@@ -369,7 +376,7 @@ def pf_rewriter(article, header, title):
 
     return full_article
 
-def ai_rewriter(bullet_points, header):
+def ai_rewriter(bullet_points, header, lang, model):
     full_article = ""
     prompt = f"""
     {bullet_points}
@@ -377,11 +384,11 @@ def ai_rewriter(bullet_points, header):
     generate me paragraphs. be detailed. you can elaborate to generate longer paragraphs, but make sure your elaboration is not by guessing or exaggerating.
     do not include promotions, and make sure the tone of rewriting is professional. make sure your returned paragraphs are coherent and fluent, instead of point form like paragraphs.
     return me in a HTML form. text must be labelled with html tags.
-    return me in traditional chinese. no premable and explanation.
+    return me in {lang}. no premable and explanation.
     """
 
     completion = client.chat.completions.create(
-        model="meta/llama-3.1-405b-instruct",
+        model=model,
         messages=[{"role": "user", "content": prompt.strip()}],
         temperature=0.2,
         top_p=0.7,
@@ -408,10 +415,10 @@ def get_title_from_url(url):
     except requests.exceptions.RequestException as e:
         return None
 
-def autoblogging(query):
-    outline = headerizer(structurer(crawl_top_10_results(query), query), query)
+def autoblogger(query, model, size, lang):
+    outline = headerizer(structurer(crawl_top_10_results(query), query, model), query, model, lang, size)
     final_article = ""
-    title = titler(outline, query)
+    title = titler(outline, query, model)
     h1 = "<h1>" + str(title) + "</h1>"
     title_tag = "   <title>" + str(title) + "</title>"
     final_article += "<html>\n<head>\n"
@@ -426,7 +433,7 @@ def autoblogging(query):
     for header in outline:
         results = []
         bullet_points = ""
-        eachquery = querier(header, query)
+        eachquery = querier(header, query, model, lang)
         for aquery in eachquery:
             thequery = aquery["query"]
             results = crawl_top_10_results(thequery, nor=4)
@@ -434,18 +441,26 @@ def autoblogging(query):
                 downloaded = trafilatura.fetch_url(result['url'])
                 website_text = trafilatura.extract(downloaded)
                 title = get_title_from_url(result['url'])
-                bulletpt = pf_rewriter(website_text, header, title)
+                bulletpt = pf_rewriter(website_text, header, lang, title, model)
                 bullet_points = combine_multiline_strings(bullet_points, bulletpt)
-        final = ai_rewriter(bullet_points, header)
+        final = ai_rewriter(bullet_points, header, lang, model)
 
         final_article += final
         final_article += "\n\n"
 
     final_article += "</body>\n</html>"
 
-    with open(f"{query}.txt", "a") as file:
+    with open(f"{query}.html", "a") as file:
         file.write(final_article)
 
-queries = ["中國貴州旅遊", "中國黑龍江旅遊", "中國湖北旅遊", "中國旅遊城市推薦"]
-for query in queries:
-    autoblogging(query)
+def main():
+    queries = ["深圳旅遊攻略 南山"]
+    model = "meta/llama-3.1-405b-instruct"
+    size = 8
+    lang = "traditional chinese"
+    for query in queries:
+        autoblogger(query, model, size, lang)
+
+if __name__ == "__main__":
+    if not DEBUG:
+        main()
